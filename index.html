@@ -735,14 +735,25 @@
             }
         }, { passive: false });
 
-        // Sayfa yüklendiğinde mobil isim girişini göster
-        if (isMobile) {
+        // Kayıtlı ismi kontrol et
+        const savedName = localStorage.getItem('playerName');
+        if (savedName && savedName.length >= 2) {
+            // İsim kayıtlıysa direkt oyunu başlat
+            playerName = savedName;
+            nameInputText = savedName;
+            startGame();
+        } else if (isMobile) {
+            // İsim yoksa ve mobilde ise formu göster
             nameInputContainer.style.display = 'block';
             setTimeout(() => nameInputEl.focus(), 300);
         }
 
         // Oyunu başlat
         function startGame() {
+            // İsmi kaydet
+            if (playerName && playerName.length >= 2) {
+                localStorage.setItem('playerName', playerName);
+            }
             currentState = GAME_STATE.PLAYING;
             gameStartTime = Date.now();
             resetGameState();
