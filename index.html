@@ -2,7 +2,7 @@
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
     <title>Bahar'ın Mario Oyunu</title>
     <style>
         * {
@@ -18,11 +18,7 @@
             min-height: 100vh;
             background: linear-gradient(to bottom, #1a1a2e, #16213e);
             font-family: 'Comic Sans MS', cursive;
-            overflow: hidden;
-            touch-action: none;
-            -webkit-touch-callout: none;
-            -webkit-user-select: none;
-            user-select: none;
+            overflow: auto;
         }
 
         .game-container {
@@ -45,7 +41,6 @@
             box-shadow: 0 10px 30px rgba(0,0,0,0.5);
             max-width: 100%;
             height: auto;
-            touch-action: none;
         }
 
         .info {
@@ -169,7 +164,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            touch-action: none;
+            touch-action: manipulation;
             -webkit-tap-highlight-color: transparent;
         }
 
