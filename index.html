@@ -1,0 +1,1277 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bahar'ın Mario Oyunu</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: linear-gradient(to bottom, #1a1a2e, #16213e);
+            font-family: 'Comic Sans MS', cursive;
+            overflow: hidden;
+        }
+
+        .game-container {
+            text-align: center;
+        }
+
+        h1 {
+            color: #E74C3C;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+            margin-bottom: 10px;
+            font-size: 2em;
+        }
+
+        #gameCanvas {
+            border: 4px solid #8B4513;
+            border-radius: 10px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+
+        .info {
+            margin-top: 15px;
+            color: #ecf0f1;
+            font-size: 1.1em;
+        }
+
+        .controls {
+            margin-top: 10px;
+            padding: 15px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 10px;
+            display: inline-block;
+        }
+
+        .controls span {
+            margin: 0 15px;
+            padding: 5px 15px;
+            background: #3498DB;
+            color: white;
+            border-radius: 5px;
+        }
+
+        #score {
+            font-size: 1.3em;
+            color: #F1C40F;
+            margin-top: 10px;
+        }
+
+        #message {
+            font-size: 1.2em;
+            color: #27AE60;
+            margin-top: 10px;
+            min-height: 30px;
+        }
+    </style>
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+</head>
+<body>
+    <div class="game-container">
+        <h1>Bahar'ın Mario Macerası</h1>
+        <canvas id="gameCanvas" width="800" height="450"></canvas>
+        <div id="score">Puan: 0</div>
+        <div id="message"></div>
+        <div class="controls">
+            <span>← → Hareket</span>
+            <span>↑ veya SPACE Zıpla</span>
+            <span>F veya X Ateş At</span>
+        </div>
+        <p class="info">70 puana ulaş ve ateş gücünü aç! BOSS'u yen ve bayrağa ulaş!</p>
+    </div>
+
+    <script>
+        // Firebase Ayarları
+        const firebaseConfig = {
+            apiKey: "AIzaSyDSWeIS8-v0cr7F1nEcW-5LjF7K_T3LBEs",
+            authDomain: "bahar-mario.firebaseapp.com",
+            databaseURL: "https://bahar-mario-default-rtdb.europe-west1.firebasedatabase.app",
+            projectId: "bahar-mario",
+            storageBucket: "bahar-mario.firebasestorage.app",
+            messagingSenderId: "416415685742",
+            appId: "1:416415685742:web:10f5cebeb6353ae70f1a7f"
+        };
+
+        // Firebase'i başlat
+        firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
+
+        // Oyun ayarları
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Dünya ayarları (kayan harita)
+        const worldWidth = 3200;
+        let cameraX = 0;
+
+        // Oyuncu bilgileri
+        let playerName = '';
+        let gameStartTime = 0;
+        let gameEndTime = 0;
+
+        // Leaderboard (Firebase'den yüklenecek)
+        let leaderboard = [];
+        let leaderboardLoaded = false;
+
+        // Firebase'den leaderboard'u yükle
+        function loadLeaderboard() {
+            database.ref('leaderboard').orderByChild('score').limitToLast(10).on('value', (snapshot) => {
+                leaderboard = [];
+                snapshot.forEach((child) => {
+                    leaderboard.push(child.val());
+                });
+                // Puanı yüksekten düşüğe sırala
+                leaderboard.sort((a, b) => {
+                    if (b.score !== a.score) return b.score - a.score;
+                    if (a.time !== b.time) return a.time - b.time;
+                    return b.lives - a.lives;
+                });
+                leaderboard = leaderboard.slice(0, 10);
+                leaderboardLoaded = true;
+            });
+        }
+
+        // Sayfa yüklendiğinde leaderboard'u çek
+        loadLeaderboard();
+
+        // Oyun durumları
+        const GAME_STATE = {
+            NAME_INPUT: 'name_input',
+            PLAYING: 'playing',
+            GAME_OVER: 'game_over',
+            GAME_WON: 'game_won',
+            LEADERBOARD: 'leaderboard'
+        };
+        let currentState = GAME_STATE.NAME_INPUT;
+        let nameInputText = '';
+        let showLeaderboardAfterGame = false;
+
+        // Oyuncu
+        const player = {
+            x: 50,
+            y: 350,
+            width: 40,
+            height: 50,
+            speedX: 0,
+            speedY: 0,
+            jumping: false,
+            color: '#E74C3C',
+            hatColor: '#C0392B',
+            lives: 3,
+            invincible: false,
+            invincibleTimer: 0,
+            facingRight: true
+        };
+
+        // Fizik
+        const gravity = 0.6;
+        const jumpPower = -14;
+        const moveSpeed = 6;
+
+        // Platformlar
+        const platforms = [
+            { x: 0, y: 420, width: 600, height: 30, color: '#8B4513' },
+            { x: 650, y: 420, width: 400, height: 30, color: '#8B4513' },
+            { x: 1100, y: 420, width: 500, height: 30, color: '#8B4513' },
+            { x: 1700, y: 420, width: 400, height: 30, color: '#8B4513' },
+            { x: 2200, y: 420, width: 600, height: 30, color: '#8B4513' },
+            { x: 2900, y: 420, width: 300, height: 30, color: '#8B4513' },
+            { x: 200, y: 340, width: 100, height: 20, color: '#27AE60' },
+            { x: 350, y: 280, width: 120, height: 20, color: '#27AE60' },
+            { x: 150, y: 220, width: 80, height: 20, color: '#27AE60' },
+            { x: 500, y: 320, width: 100, height: 20, color: '#27AE60' },
+            { x: 280, y: 180, width: 60, height: 15, color: '#9B59B6', isSecret: true },
+            { x: 700, y: 340, width: 120, height: 20, color: '#27AE60' },
+            { x: 850, y: 280, width: 100, height: 20, color: '#27AE60' },
+            { x: 1000, y: 220, width: 80, height: 20, color: '#27AE60' },
+            { x: 750, y: 180, width: 100, height: 20, color: '#27AE60' },
+            { x: 950, y: 140, width: 50, height: 15, color: '#9B59B6', isSecret: true },
+            { x: 1150, y: 350, width: 100, height: 20, color: '#27AE60' },
+            { x: 1300, y: 300, width: 120, height: 20, color: '#27AE60' },
+            { x: 1450, y: 250, width: 100, height: 20, color: '#27AE60' },
+            { x: 1350, y: 180, width: 80, height: 20, color: '#27AE60' },
+            { x: 1550, y: 320, width: 100, height: 20, color: '#27AE60' },
+            { x: 1500, y: 150, width: 60, height: 15, color: '#9B59B6', isSecret: true },
+            { x: 1750, y: 340, width: 150, height: 20, color: '#27AE60' },
+            { x: 1950, y: 280, width: 120, height: 20, color: '#27AE60' },
+            { x: 2100, y: 350, width: 100, height: 20, color: '#27AE60' },
+            { x: 2300, y: 320, width: 150, height: 20, color: '#E74C3C' },
+            { x: 2500, y: 280, width: 100, height: 20, color: '#E74C3C' },
+            { x: 2650, y: 320, width: 150, height: 20, color: '#E74C3C' },
+            { x: 2850, y: 350, width: 100, height: 20, color: '#F1C40F' },
+            { x: 3000, y: 300, width: 150, height: 20, color: '#F1C40F' },
+        ];
+
+        // Bayrak
+        const flag = {
+            x: 3100,
+            y: 300,
+            poleHeight: 100,
+            flagWidth: 50,
+            flagHeight: 35
+        };
+
+        // Altınlar
+        let coins = [
+            { x: 230, y: 310, size: 20, collected: false, isSecret: false },
+            { x: 400, y: 250, size: 20, collected: false, isSecret: false },
+            { x: 180, y: 190, size: 20, collected: false, isSecret: false },
+            { x: 530, y: 290, size: 20, collected: false, isSecret: false },
+            { x: 300, y: 150, size: 25, collected: false, isSecret: true },
+            { x: 750, y: 310, size: 20, collected: false, isSecret: false },
+            { x: 890, y: 250, size: 20, collected: false, isSecret: false },
+            { x: 1030, y: 190, size: 20, collected: false, isSecret: false },
+            { x: 790, y: 150, size: 20, collected: false, isSecret: false },
+            { x: 970, y: 110, size: 25, collected: false, isSecret: true },
+            { x: 1190, y: 320, size: 20, collected: false, isSecret: false },
+            { x: 1350, y: 270, size: 20, collected: false, isSecret: false },
+            { x: 1490, y: 220, size: 20, collected: false, isSecret: false },
+            { x: 1380, y: 150, size: 20, collected: false, isSecret: false },
+            { x: 1590, y: 290, size: 20, collected: false, isSecret: false },
+            { x: 1525, y: 120, size: 30, collected: false, isSecret: true },
+            { x: 1820, y: 310, size: 20, collected: false, isSecret: false },
+            { x: 2000, y: 250, size: 20, collected: false, isSecret: false },
+            { x: 2140, y: 320, size: 20, collected: false, isSecret: false },
+            { x: 2370, y: 290, size: 20, collected: false, isSecret: false },
+            { x: 2540, y: 250, size: 20, collected: false, isSecret: false },
+            { x: 2720, y: 290, size: 20, collected: false, isSecret: false },
+            { x: 2890, y: 320, size: 20, collected: false, isSecret: false },
+            { x: 3060, y: 270, size: 20, collected: false, isSecret: false },
+        ];
+
+        // Düşmanlar
+        let enemies = [
+            { x: 300, y: 390, width: 35, height: 30, speedX: 1.5, minX: 200, maxX: 500 },
+            { x: 450, y: 390, width: 35, height: 30, speedX: -2, minX: 350, maxX: 550 },
+            { x: 750, y: 390, width: 35, height: 30, speedX: 2, minX: 680, maxX: 900 },
+            { x: 900, y: 390, width: 35, height: 30, speedX: -1.5, minX: 800, maxX: 1000 },
+            { x: 800, y: 250, width: 35, height: 30, speedX: 1, minX: 700, maxX: 900 },
+            { x: 1200, y: 390, width: 35, height: 30, speedX: 2, minX: 1130, maxX: 1350 },
+            { x: 1400, y: 390, width: 35, height: 30, speedX: -2, minX: 1300, maxX: 1550 },
+            { x: 1350, y: 270, width: 35, height: 30, speedX: 1.5, minX: 1300, maxX: 1420 },
+            { x: 1500, y: 390, width: 35, height: 30, speedX: 1, minX: 1400, maxX: 1580 },
+            { x: 1800, y: 390, width: 35, height: 30, speedX: 2.5, minX: 1730, maxX: 1950 },
+            { x: 1950, y: 390, width: 35, height: 30, speedX: -2, minX: 1850, maxX: 2050 },
+            { x: 2050, y: 390, width: 35, height: 30, speedX: 1.5, minX: 1950, maxX: 2150 },
+            { x: 2250, y: 390, width: 35, height: 30, speedX: 2, minX: 2200, maxX: 2350 },
+            { x: 2350, y: 390, width: 35, height: 30, speedX: -2.5, minX: 2250, maxX: 2450 },
+        ];
+
+        // Boss
+        let boss = {
+            x: 2550,
+            y: 340,
+            width: 80,
+            height: 80,
+            speedX: 2,
+            minX: 2350,
+            maxX: 2750,
+            health: 5,
+            maxHealth: 5,
+            isActive: false,
+            attackTimer: 0,
+            defeated: false,
+            hitTimer: 0
+        };
+
+        // Bulutlar ve dağlar
+        const clouds = [
+            { x: 100, y: 50, size: 40 }, { x: 400, y: 80, size: 50 },
+            { x: 700, y: 40, size: 45 }, { x: 1000, y: 70, size: 35 },
+            { x: 1300, y: 50, size: 55 }, { x: 1600, y: 90, size: 40 },
+            { x: 1900, y: 60, size: 50 }, { x: 2200, y: 45, size: 45 },
+            { x: 2500, y: 75, size: 40 }, { x: 2800, y: 55, size: 50 },
+        ];
+
+        const mountains = [
+            { x: 0, width: 200, height: 150 }, { x: 300, width: 250, height: 180 },
+            { x: 600, width: 200, height: 140 }, { x: 900, width: 280, height: 200 },
+            { x: 1250, width: 220, height: 160 }, { x: 1550, width: 250, height: 190 },
+            { x: 1850, width: 200, height: 150 }, { x: 2150, width: 300, height: 220 },
+            { x: 2500, width: 250, height: 180 }, { x: 2850, width: 200, height: 160 },
+        ];
+
+        // Oyun durumu
+        let score = 0;
+        let gameOver = false;
+        let gameWon = false;
+        let keys = {};
+
+        // Ateş gücü
+        let hasFirePower = false;
+        let firePowerUnlocked = false;
+        let fireballs = [];
+        let fireballCooldown = 0;
+        let powerUpNotification = '';
+        let notificationTimer = 0;
+
+        // Tuş kontrolleri
+        document.addEventListener('keydown', (e) => {
+            keys[e.key] = true;
+
+            // İsim girişi ekranı
+            if (currentState === GAME_STATE.NAME_INPUT) {
+                if (e.key === 'Backspace') {
+                    nameInputText = nameInputText.slice(0, -1);
+                } else if (e.key === 'Enter' && nameInputText.length >= 2) {
+                    playerName = nameInputText;
+                    startGame();
+                } else if (e.key.length === 1 && nameInputText.length < 15) {
+                    nameInputText += e.key;
+                }
+                e.preventDefault();
+                return;
+            }
+
+            // Leaderboard ekranı
+            if (currentState === GAME_STATE.LEADERBOARD) {
+                if (e.key === 'r' || e.key === 'Enter') {
+                    currentState = GAME_STATE.NAME_INPUT;
+                    nameInputText = '';
+                }
+                return;
+            }
+
+            if (e.key === ' ' || e.key === 'ArrowUp') {
+                e.preventDefault();
+            }
+
+            // Oyun bitti ekranları
+            if ((currentState === GAME_STATE.GAME_OVER || currentState === GAME_STATE.GAME_WON)) {
+                if (e.key === 'l') {
+                    currentState = GAME_STATE.LEADERBOARD;
+                } else if (e.key === 'r') {
+                    currentState = GAME_STATE.NAME_INPUT;
+                    nameInputText = '';
+                }
+                return;
+            }
+
+            // Ateş atma
+            if ((e.key === 'f' || e.key === 'x') && hasFirePower && fireballCooldown <= 0 && currentState === GAME_STATE.PLAYING) {
+                shootFireball();
+            }
+        });
+
+        document.addEventListener('keyup', (e) => {
+            keys[e.key] = false;
+        });
+
+        // Oyunu başlat
+        function startGame() {
+            currentState = GAME_STATE.PLAYING;
+            gameStartTime = Date.now();
+            resetGameState();
+        }
+
+        // Oyun durumunu sıfırla
+        function resetGameState() {
+            player.x = 50;
+            player.y = 350;
+            player.speedX = 0;
+            player.speedY = 0;
+            player.jumping = false;
+            player.lives = 3;
+            player.invincible = false;
+            player.invincibleTimer = 0;
+            player.color = '#E74C3C';
+            player.hatColor = '#C0392B';
+
+            cameraX = 0;
+            score = 0;
+            gameOver = false;
+            gameWon = false;
+
+            hasFirePower = false;
+            firePowerUnlocked = false;
+            fireballs = [];
+            fireballCooldown = 0;
+            powerUpNotification = '';
+            notificationTimer = 0;
+
+            coins.forEach(coin => coin.collected = false);
+
+            enemies = [
+                { x: 300, y: 390, width: 35, height: 30, speedX: 1.5, minX: 200, maxX: 500 },
+                { x: 450, y: 390, width: 35, height: 30, speedX: -2, minX: 350, maxX: 550 },
+                { x: 750, y: 390, width: 35, height: 30, speedX: 2, minX: 680, maxX: 900 },
+                { x: 900, y: 390, width: 35, height: 30, speedX: -1.5, minX: 800, maxX: 1000 },
+                { x: 800, y: 250, width: 35, height: 30, speedX: 1, minX: 700, maxX: 900 },
+                { x: 1200, y: 390, width: 35, height: 30, speedX: 2, minX: 1130, maxX: 1350 },
+                { x: 1400, y: 390, width: 35, height: 30, speedX: -2, minX: 1300, maxX: 1550 },
+                { x: 1350, y: 270, width: 35, height: 30, speedX: 1.5, minX: 1300, maxX: 1420 },
+                { x: 1500, y: 390, width: 35, height: 30, speedX: 1, minX: 1400, maxX: 1580 },
+                { x: 1800, y: 390, width: 35, height: 30, speedX: 2.5, minX: 1730, maxX: 1950 },
+                { x: 1950, y: 390, width: 35, height: 30, speedX: -2, minX: 1850, maxX: 2050 },
+                { x: 2050, y: 390, width: 35, height: 30, speedX: 1.5, minX: 1950, maxX: 2150 },
+                { x: 2250, y: 390, width: 35, height: 30, speedX: 2, minX: 2200, maxX: 2350 },
+                { x: 2350, y: 390, width: 35, height: 30, speedX: -2.5, minX: 2250, maxX: 2450 },
+            ];
+
+            boss = {
+                x: 2550, y: 340, width: 80, height: 80, speedX: 2,
+                minX: 2350, maxX: 2750, health: 5, maxHealth: 5,
+                isActive: false, attackTimer: 0, defeated: false, hitTimer: 0
+            };
+
+            document.getElementById('score').textContent = 'Puan: 0';
+            document.getElementById('message').textContent = '';
+        }
+
+        // Skoru kaydet
+        function saveScore(won) {
+            gameEndTime = Date.now();
+            const playTime = Math.floor((gameEndTime - gameStartTime) / 1000);
+
+            const entry = {
+                name: playerName,
+                score: score,
+                time: playTime,
+                lives: player.lives,
+                won: won,
+                date: new Date().toLocaleDateString('tr-TR'),
+                timestamp: Date.now()
+            };
+
+            // Firebase'e kaydet
+            database.ref('leaderboard').push(entry)
+                .then(() => {
+                    console.log('Skor kaydedildi!');
+                })
+                .catch((error) => {
+                    console.error('Skor kaydedilemedi:', error);
+                });
+        }
+
+        // Süreyi formatla
+        function formatTime(seconds) {
+            const mins = Math.floor(seconds / 60);
+            const secs = seconds % 60;
+            return `${mins}:${secs.toString().padStart(2, '0')}`;
+        }
+
+        // İsim girişi ekranı
+        function drawNameInput() {
+            // Arka plan
+            const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+            gradient.addColorStop(0, '#1a1a2e');
+            gradient.addColorStop(1, '#16213e');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Başlık
+            ctx.fillStyle = '#E74C3C';
+            ctx.font = 'bold 42px Comic Sans MS';
+            ctx.textAlign = 'center';
+            ctx.fillText("🎮 Bahar'ın Mario Macerası 🎮", canvas.width/2, 80);
+
+            // Karakter resmi
+            ctx.fillStyle = '#E74C3C';
+            ctx.fillRect(canvas.width/2 - 20, 120, 40, 35);
+            ctx.fillStyle = '#FDBF6F';
+            ctx.beginPath();
+            ctx.arc(canvas.width/2, 115, 15, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#C0392B';
+            ctx.fillRect(canvas.width/2 - 18, 95, 36, 15);
+
+            // İsim girişi kutusu
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+            ctx.fillRect(canvas.width/2 - 150, 180, 300, 50);
+            ctx.strokeStyle = '#3498DB';
+            ctx.lineWidth = 3;
+            ctx.strokeRect(canvas.width/2 - 150, 180, 300, 50);
+
+            ctx.fillStyle = '#FFFFFF';
+            ctx.font = '24px Comic Sans MS';
+            ctx.fillText('Adını Yaz:', canvas.width/2, 170);
+
+            // Girilen isim
+            ctx.fillStyle = '#F1C40F';
+            ctx.font = 'bold 28px Comic Sans MS';
+            const displayText = nameInputText + (Math.floor(Date.now() / 500) % 2 === 0 ? '|' : '');
+            ctx.fillText(displayText || '|', canvas.width/2, 215);
+
+            // Talimatlar
+            ctx.fillStyle = '#BDC3C7';
+            ctx.font = '18px Comic Sans MS';
+            ctx.fillText('En az 2 karakter gir ve ENTER tuşuna bas', canvas.width/2, 260);
+
+            // Leaderboard önizleme
+            if (!leaderboardLoaded) {
+                ctx.fillStyle = '#3498DB';
+                ctx.font = '18px Comic Sans MS';
+                ctx.fillText('🌐 Leaderboard yükleniyor...', canvas.width/2, 310);
+            } else if (leaderboard.length > 0) {
+                ctx.fillStyle = '#9B59B6';
+                ctx.font = 'bold 22px Comic Sans MS';
+                ctx.fillText('🏆 EN İYİ OYUNCULAR (Online) 🏆', canvas.width/2, 310);
+
+                ctx.font = '16px Comic Sans MS';
+                const topPlayers = leaderboard.slice(0, 3);
+                topPlayers.forEach((entry, i) => {
+                    const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : '🥉';
+                    ctx.fillStyle = '#ECF0F1';
+                    ctx.fillText(`${medal} ${entry.name}: ${entry.score} puan`, canvas.width/2, 340 + i * 25);
+                });
+            }
+
+            // Oyun açıklaması
+            ctx.fillStyle = '#27AE60';
+            ctx.font = '14px Comic Sans MS';
+            ctx.fillText('← → Hareket | ↑ Zıpla | F Ateş At | 70 puan = Ateş Gücü!', canvas.width/2, 420);
+        }
+
+        // Leaderboard ekranı
+        function drawLeaderboard() {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.95)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Başlık
+            ctx.fillStyle = '#F1C40F';
+            ctx.font = 'bold 36px Comic Sans MS';
+            ctx.textAlign = 'center';
+            ctx.fillText('🏆 ONLINE LEADERBOARD 🏆', canvas.width/2, 50);
+
+            // Tablo başlıkları
+            ctx.fillStyle = '#3498DB';
+            ctx.font = 'bold 16px Comic Sans MS';
+            ctx.textAlign = 'left';
+            ctx.fillText('SIRA', 60, 90);
+            ctx.fillText('İSİM', 120, 90);
+            ctx.fillText('PUAN', 280, 90);
+            ctx.fillText('SÜRE', 380, 90);
+            ctx.fillText('CAN', 460, 90);
+            ctx.fillText('DURUM', 520, 90);
+            ctx.fillText('TARİH', 620, 90);
+
+            // Çizgi
+            ctx.strokeStyle = '#3498DB';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(50, 100);
+            ctx.lineTo(750, 100);
+            ctx.stroke();
+
+            // Oyuncular
+            if (leaderboard.length === 0) {
+                ctx.fillStyle = '#BDC3C7';
+                ctx.font = '20px Comic Sans MS';
+                ctx.textAlign = 'center';
+                ctx.fillText('Henüz kayıt yok. İlk sen ol!', canvas.width/2, 200);
+            } else {
+                leaderboard.forEach((entry, i) => {
+                    const y = 130 + i * 30;
+                    const medals = ['🥇', '🥈', '🥉'];
+                    const medal = i < 3 ? medals[i] : `${i + 1}.`;
+
+                    // Arka plan (ilk 3 için özel)
+                    if (i < 3) {
+                        ctx.fillStyle = i === 0 ? 'rgba(255, 215, 0, 0.2)' :
+                                       i === 1 ? 'rgba(192, 192, 192, 0.2)' :
+                                       'rgba(205, 127, 50, 0.2)';
+                        ctx.fillRect(50, y - 18, 700, 28);
+                    }
+
+                    ctx.fillStyle = i < 3 ? '#F1C40F' : '#ECF0F1';
+                    ctx.font = i < 3 ? 'bold 16px Comic Sans MS' : '16px Comic Sans MS';
+                    ctx.textAlign = 'left';
+
+                    ctx.fillText(medal, 60, y);
+                    ctx.fillText(entry.name.substring(0, 12), 120, y);
+                    ctx.fillText(entry.score.toString(), 280, y);
+                    ctx.fillText(formatTime(entry.time), 380, y);
+
+                    // Kalpler
+                    ctx.fillText('❤️'.repeat(entry.lives), 460, y);
+
+                    // Durum
+                    ctx.fillStyle = entry.won ? '#27AE60' : '#E74C3C';
+                    ctx.fillText(entry.won ? '✅ Kazandı' : '❌ Kaybetti', 520, y);
+
+                    ctx.fillStyle = '#BDC3C7';
+                    ctx.fillText(entry.date, 620, y);
+                });
+            }
+
+            // Alt bilgi
+            ctx.fillStyle = '#9B59B6';
+            ctx.font = '18px Comic Sans MS';
+            ctx.textAlign = 'center';
+            ctx.fillText('R tuşuna basarak yeni oyun başlat', canvas.width/2, 420);
+        }
+
+        // Oyun sonu ekranı
+        function drawGameEndScreen(won) {
+            const playTime = Math.floor((gameEndTime - gameStartTime) / 1000);
+
+            ctx.fillStyle = won ? 'rgba(39, 174, 96, 0.95)' : 'rgba(192, 57, 43, 0.95)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Başlık
+            ctx.fillStyle = '#F1C40F';
+            ctx.font = 'bold 42px Comic Sans MS';
+            ctx.textAlign = 'center';
+            ctx.fillText(won ? `🎉 TEBRİKLER ${playerName.toUpperCase()}! 🎉` : `😢 OYUN BİTTİ ${playerName.toUpperCase()}!`, canvas.width/2, 60);
+
+            // İstatistik kutusu
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+            ctx.fillRect(canvas.width/2 - 200, 90, 400, 200);
+            ctx.strokeStyle = '#F1C40F';
+            ctx.lineWidth = 3;
+            ctx.strokeRect(canvas.width/2 - 200, 90, 400, 200);
+
+            ctx.fillStyle = '#FFFFFF';
+            ctx.font = 'bold 24px Comic Sans MS';
+            ctx.fillText('📊 OYUN İSTATİSTİKLERİ', canvas.width/2, 125);
+
+            ctx.font = '20px Comic Sans MS';
+            ctx.textAlign = 'left';
+            const startX = canvas.width/2 - 180;
+
+            ctx.fillText(`👤 Oyuncu: ${playerName}`, startX, 160);
+            ctx.fillText(`💰 Toplam Puan: ${score}`, startX, 190);
+            ctx.fillText(`⏱️ Süre: ${formatTime(playTime)}`, startX, 220);
+            ctx.fillText(`❤️ Kalan Can: ${'❤️'.repeat(player.lives)}${'🖤'.repeat(3 - player.lives)}`, startX, 250);
+            ctx.fillText(`🏆 Durum: ${won ? 'KAZANDI!' : 'KAYBETTİ'}`, startX, 280);
+
+            // Sıralama
+            const rank = leaderboard.findIndex(e => e.name === playerName && e.score === score) + 1;
+            if (rank > 0 && rank <= 10) {
+                ctx.fillStyle = '#F1C40F';
+                ctx.font = 'bold 26px Comic Sans MS';
+                ctx.textAlign = 'center';
+                ctx.fillText(`🏅 SIRALAMADA ${rank}. SIRADA!`, canvas.width/2, 330);
+            }
+
+            // Butonlar
+            ctx.fillStyle = '#3498DB';
+            ctx.fillRect(canvas.width/2 - 180, 360, 160, 45);
+            ctx.fillStyle = '#9B59B6';
+            ctx.fillRect(canvas.width/2 + 20, 360, 160, 45);
+
+            ctx.fillStyle = '#FFFFFF';
+            ctx.font = 'bold 18px Comic Sans MS';
+            ctx.textAlign = 'center';
+            ctx.fillText('R - Yeni Oyun', canvas.width/2 - 100, 390);
+            ctx.fillText('L - Sıralama', canvas.width/2 + 100, 390);
+
+            ctx.fillStyle = '#BDC3C7';
+            ctx.font = '14px Comic Sans MS';
+            ctx.fillText('Klavyeden R veya L tuşuna bas', canvas.width/2, 430);
+        }
+
+        // Ateş topu at
+        function shootFireball() {
+            fireballs.push({
+                x: player.x + (player.facingRight ? player.width : 0),
+                y: player.y + 25,
+                speedX: player.facingRight ? 10 : -10,
+                size: 12
+            });
+            fireballCooldown = 20;
+        }
+
+        // Ateş toplarını güncelle
+        function updateFireballs() {
+            if (fireballCooldown > 0) fireballCooldown--;
+            fireballs = fireballs.filter(fb => {
+                fb.x += fb.speedX;
+                fb.y += 0.5;
+                return !(fb.x < cameraX - 50 || fb.x > cameraX + canvas.width + 50 || fb.y > canvas.height);
+            });
+        }
+
+        // Ateş toplarını çiz
+        function drawFireballs() {
+            fireballs.forEach(fb => {
+                const screenX = fb.x - cameraX;
+                ctx.shadowColor = '#FF6B00';
+                ctx.shadowBlur = 15;
+                const gradient = ctx.createRadialGradient(screenX, fb.y, 0, screenX, fb.y, fb.size);
+                gradient.addColorStop(0, '#FFFF00');
+                gradient.addColorStop(0.5, '#FF6B00');
+                gradient.addColorStop(1, '#E74C3C');
+                ctx.fillStyle = gradient;
+                ctx.beginPath();
+                ctx.arc(screenX, fb.y, fb.size, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.shadowBlur = 0;
+            });
+        }
+
+        // Ateş topu çarpışma
+        function checkFireballCollisions() {
+            fireballs.forEach((fb, fbIndex) => {
+                enemies.forEach(enemy => {
+                    if (enemy.x < -100) return;
+                    if (fb.x > enemy.x && fb.x < enemy.x + enemy.width &&
+                        fb.y > enemy.y && fb.y < enemy.y + enemy.height) {
+                        enemy.x = -200;
+                        fireballs.splice(fbIndex, 1);
+                        score += 25;
+                        document.getElementById('score').textContent = 'Puan: ' + score;
+                    }
+                });
+
+                if (boss.isActive && !boss.defeated) {
+                    if (fb.x > boss.x && fb.x < boss.x + boss.width &&
+                        fb.y > boss.y && fb.y < boss.y + boss.height) {
+                        boss.health--;
+                        boss.hitTimer = 20;
+                        fireballs.splice(fbIndex, 1);
+                        score += 30;
+                        if (boss.health <= 0) {
+                            boss.defeated = true;
+                            score += 200;
+                            document.getElementById('message').textContent = 'BOSS YENİLDİ!';
+                        }
+                    }
+                }
+            });
+        }
+
+        // Ateş gücü kontrolü
+        function checkFirePowerUnlock() {
+            if (!firePowerUnlocked && score >= 70) {
+                hasFirePower = true;
+                firePowerUnlocked = true;
+                powerUpNotification = '🔥 ATEŞ GÜCÜ AÇILDI! F veya X tuşu ile ateş at!';
+                notificationTimer = 180;
+                player.color = '#FF6B00';
+                player.hatColor = '#E74C3C';
+            }
+        }
+
+        // Bildirim çiz
+        function drawNotification() {
+            if (notificationTimer > 0) {
+                notificationTimer--;
+                const alpha = 0.7 + Math.sin(notificationTimer * 0.2) * 0.3;
+                ctx.fillStyle = `rgba(255, 107, 0, ${alpha})`;
+                ctx.fillRect(canvas.width/2 - 250, 90, 500, 45);
+                ctx.strokeStyle = '#FFFF00';
+                ctx.lineWidth = 3;
+                ctx.strokeRect(canvas.width/2 - 250, 90, 500, 45);
+                ctx.fillStyle = '#FFFFFF';
+                ctx.font = 'bold 18px Comic Sans MS';
+                ctx.textAlign = 'center';
+                ctx.fillText(powerUpNotification, canvas.width/2, 118);
+            }
+        }
+
+        // Kalp çiz
+        function drawHeart(x, y, size, filled) {
+            ctx.save();
+            ctx.beginPath();
+            ctx.moveTo(x, y + size / 4);
+            ctx.bezierCurveTo(x, y, x - size / 2, y, x - size / 2, y + size / 4);
+            ctx.bezierCurveTo(x - size / 2, y + size / 2, x, y + size * 0.75, x, y + size);
+            ctx.bezierCurveTo(x, y + size * 0.75, x + size / 2, y + size / 2, x + size / 2, y + size / 4);
+            ctx.bezierCurveTo(x + size / 2, y, x, y, x, y + size / 4);
+            ctx.closePath();
+            ctx.fillStyle = filled ? '#E74C3C' : '#555';
+            ctx.fill();
+            ctx.restore();
+        }
+
+        // UI çiz
+        function drawUI() {
+            // Oyuncu adı
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+            ctx.fillRect(canvas.width - 130, 50, 120, 25);
+            ctx.fillStyle = '#ECF0F1';
+            ctx.font = '14px Comic Sans MS';
+            ctx.textAlign = 'center';
+            ctx.fillText('👤 ' + playerName, canvas.width - 70, 68);
+
+            // Süre
+            const currentTime = Math.floor((Date.now() - gameStartTime) / 1000);
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+            ctx.fillRect(470, 10, 80, 35);
+            ctx.strokeStyle = '#9B59B6';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(470, 10, 80, 35);
+            ctx.fillStyle = '#9B59B6';
+            ctx.font = 'bold 16px Comic Sans MS';
+            ctx.textAlign = 'center';
+            ctx.fillText('⏱️' + formatTime(currentTime), 510, 33);
+
+            // Canlar
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+            ctx.fillRect(10, 10, 110, 35);
+            ctx.strokeStyle = '#E74C3C';
+            ctx.strokeRect(10, 10, 110, 35);
+            for (let i = 0; i < 3; i++) {
+                drawHeart(35 + i * 30, 15, 20, i < player.lives);
+            }
+
+            // Puan
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+            ctx.fillRect(130, 10, 100, 35);
+            ctx.strokeStyle = '#F1C40F';
+            ctx.strokeRect(130, 10, 100, 35);
+            ctx.fillStyle = '#F1C40F';
+            ctx.font = 'bold 18px Comic Sans MS';
+            ctx.textAlign = 'left';
+            ctx.fillText('💰 ' + score, 145, 33);
+
+            // İlerleme
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+            ctx.fillRect(250, 10, 200, 35);
+            ctx.strokeStyle = '#3498DB';
+            ctx.strokeRect(250, 10, 200, 35);
+            const progress = Math.min((player.x / (worldWidth - 200)) * 100, 100);
+            ctx.fillStyle = '#3498DB';
+            ctx.fillRect(255, 15, (190 * progress / 100), 25);
+            ctx.fillStyle = 'white';
+            ctx.font = '12px Comic Sans MS';
+            ctx.textAlign = 'center';
+            ctx.fillText(Math.floor(progress) + '%', 350, 32);
+
+            // Boss
+            if (boss.isActive && !boss.defeated) {
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                ctx.fillRect(canvas.width/2 - 100, 55, 200, 25);
+                ctx.strokeStyle = '#E74C3C';
+                ctx.strokeRect(canvas.width/2 - 100, 55, 200, 25);
+                ctx.fillStyle = '#E74C3C';
+                ctx.fillRect(canvas.width/2 - 95, 60, 190 * (boss.health / boss.maxHealth), 15);
+                ctx.fillStyle = 'white';
+                ctx.font = 'bold 12px Comic Sans MS';
+                ctx.fillText('👹 BOSS', canvas.width/2, 72);
+            }
+
+            // Ateş gücü
+            if (hasFirePower) {
+                ctx.fillStyle = 'rgba(255, 107, 0, 0.7)';
+                ctx.fillRect(canvas.width - 120, 10, 110, 35);
+                ctx.strokeStyle = '#FF6B00';
+                ctx.strokeRect(canvas.width - 120, 10, 110, 35);
+                ctx.fillStyle = '#FFFF00';
+                ctx.font = 'bold 14px Comic Sans MS';
+                ctx.textAlign = 'center';
+                ctx.fillText('🔥 ATEŞ', canvas.width - 65, 32);
+            }
+        }
+
+        // Arka plan
+        function drawBackground() {
+            const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+            if (cameraX > 2100 && !boss.defeated) {
+                gradient.addColorStop(0, '#4a1a1a');
+                gradient.addColorStop(1, '#2d1f1f');
+            } else {
+                gradient.addColorStop(0, '#87CEEB');
+                gradient.addColorStop(1, '#98D8C8');
+            }
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.fillStyle = '#5D6D7E';
+            mountains.forEach(m => {
+                const screenX = m.x - cameraX * 0.3;
+                if (screenX > -m.width && screenX < canvas.width) {
+                    ctx.beginPath();
+                    ctx.moveTo(screenX, canvas.height - 30);
+                    ctx.lineTo(screenX + m.width/2, canvas.height - 30 - m.height);
+                    ctx.lineTo(screenX + m.width, canvas.height - 30);
+                    ctx.closePath();
+                    ctx.fill();
+                }
+            });
+
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+            clouds.forEach(cloud => {
+                const screenX = cloud.x - cameraX * 0.5;
+                if (screenX > -cloud.size*2 && screenX < canvas.width + cloud.size) {
+                    ctx.beginPath();
+                    ctx.arc(screenX, cloud.y, cloud.size/2, 0, Math.PI * 2);
+                    ctx.arc(screenX + cloud.size/2, cloud.y - 5, cloud.size/2.5, 0, Math.PI * 2);
+                    ctx.arc(screenX + cloud.size, cloud.y, cloud.size/2, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            });
+        }
+
+        // Bayrak
+        function drawFlag() {
+            const screenX = flag.x - cameraX;
+            if (screenX < -50 || screenX > canvas.width + 50) return;
+            ctx.fillStyle = '#8B4513';
+            ctx.fillRect(screenX, flag.y - flag.poleHeight, 10, flag.poleHeight);
+            ctx.fillStyle = '#F1C40F';
+            ctx.beginPath();
+            ctx.arc(screenX + 5, flag.y - flag.poleHeight, 10, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#E74C3C';
+            ctx.beginPath();
+            ctx.moveTo(screenX + 10, flag.y - flag.poleHeight + 5);
+            ctx.lineTo(screenX + 10 + flag.flagWidth, flag.y - flag.poleHeight + 18);
+            ctx.lineTo(screenX + 10 + flag.flagWidth, flag.y - flag.poleHeight + flag.flagHeight + 5);
+            ctx.lineTo(screenX + 10, flag.y - flag.poleHeight + flag.flagHeight - 5);
+            ctx.closePath();
+            ctx.fill();
+            ctx.fillStyle = '#F1C40F';
+            ctx.font = 'bold 20px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('★', screenX + 35, flag.y - flag.poleHeight + 30);
+        }
+
+        // Platformlar
+        function drawPlatforms() {
+            platforms.forEach(p => {
+                const screenX = p.x - cameraX;
+                if (screenX > canvas.width || screenX + p.width < 0) return;
+                ctx.fillStyle = p.color;
+                ctx.fillRect(screenX, p.y, p.width, p.height);
+                ctx.fillStyle = p.isSecret ? '#8E44AD' : (p.y < 420 ? '#2ECC71' : '#27AE60');
+                ctx.fillRect(screenX, p.y, p.width, p.y < 420 ? 5 : 8);
+            });
+        }
+
+        // Altınlar
+        function drawCoins() {
+            coins.forEach(coin => {
+                if (coin.collected) return;
+                const screenX = coin.x - cameraX;
+                if (screenX < -30 || screenX > canvas.width + 30) return;
+                if (coin.isSecret) { ctx.shadowColor = '#F1C40F'; ctx.shadowBlur = 15; }
+                ctx.fillStyle = coin.isSecret ? '#9B59B6' : '#F1C40F';
+                ctx.beginPath();
+                ctx.arc(screenX, coin.y, coin.size/2, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = coin.isSecret ? '#8E44AD' : '#F39C12';
+                ctx.beginPath();
+                ctx.arc(screenX, coin.y, coin.size/3, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = '#FFF';
+                ctx.beginPath();
+                ctx.arc(screenX - 3, coin.y - 3, 3, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.shadowBlur = 0;
+            });
+        }
+
+        // Düşmanlar
+        function drawEnemies() {
+            enemies.forEach(enemy => {
+                if (enemy.x < -100) return;
+                const screenX = enemy.x - cameraX;
+                if (screenX < -50 || screenX > canvas.width + 50) return;
+                ctx.fillStyle = '#9B59B6';
+                ctx.beginPath();
+                ctx.arc(screenX + enemy.width/2, enemy.y + 10, enemy.width/2, Math.PI, 0);
+                ctx.fill();
+                ctx.fillStyle = '#E8DAEF';
+                ctx.beginPath();
+                ctx.arc(screenX + 10, enemy.y + 5, 4, 0, Math.PI * 2);
+                ctx.arc(screenX + enemy.width - 10, enemy.y + 5, 4, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillRect(screenX + 5, enemy.y + 10, enemy.width - 10, enemy.height - 10);
+                ctx.fillStyle = 'white';
+                ctx.beginPath();
+                ctx.arc(screenX + 10, enemy.y + 18, 5, 0, Math.PI * 2);
+                ctx.arc(screenX + enemy.width - 10, enemy.y + 18, 5, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = 'black';
+                ctx.beginPath();
+                ctx.arc(screenX + 10, enemy.y + 18, 2, 0, Math.PI * 2);
+                ctx.arc(screenX + enemy.width - 10, enemy.y + 18, 2, 0, Math.PI * 2);
+                ctx.fill();
+            });
+        }
+
+        // Boss
+        function drawBoss() {
+            if (boss.defeated) return;
+            const screenX = boss.x - cameraX;
+            if (screenX < -100 || screenX > canvas.width + 100) return;
+            if (boss.hitTimer > 0) ctx.globalAlpha = 0.5;
+            ctx.fillStyle = 'rgba(0,0,0,0.3)';
+            ctx.beginPath();
+            ctx.ellipse(screenX + boss.width/2, boss.y + boss.height, boss.width/2, 10, 0, 0, Math.PI * 2);
+            ctx.fill();
+            const gradient = ctx.createRadialGradient(screenX + boss.width/2, boss.y + 20, 10, screenX + boss.width/2, boss.y + 20, boss.width/2);
+            gradient.addColorStop(0, '#E74C3C');
+            gradient.addColorStop(1, '#922B21');
+            ctx.fillStyle = gradient;
+            ctx.beginPath();
+            ctx.arc(screenX + boss.width/2, boss.y + 25, boss.width/2, Math.PI, 0);
+            ctx.fill();
+            ctx.fillStyle = '#FADBD8';
+            ctx.beginPath();
+            ctx.arc(screenX + 20, boss.y + 15, 8, 0, Math.PI * 2);
+            ctx.arc(screenX + boss.width - 20, boss.y + 15, 8, 0, Math.PI * 2);
+            ctx.arc(screenX + boss.width/2, boss.y + 5, 10, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#F5B7B1';
+            ctx.fillRect(screenX + 15, boss.y + 25, boss.width - 30, boss.height - 30);
+            ctx.fillStyle = 'white';
+            ctx.beginPath();
+            ctx.arc(screenX + 25, boss.y + 45, 12, 0, Math.PI * 2);
+            ctx.arc(screenX + boss.width - 25, boss.y + 45, 12, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = '#2C3E50';
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.moveTo(screenX + 15, boss.y + 35);
+            ctx.lineTo(screenX + 35, boss.y + 38);
+            ctx.moveTo(screenX + boss.width - 15, boss.y + 35);
+            ctx.lineTo(screenX + boss.width - 35, boss.y + 38);
+            ctx.stroke();
+            ctx.fillStyle = '#E74C3C';
+            ctx.beginPath();
+            ctx.arc(screenX + 25, boss.y + 47, 6, 0, Math.PI * 2);
+            ctx.arc(screenX + boss.width - 25, boss.y + 47, 6, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = 'white';
+            ctx.fillRect(screenX + 25, boss.y + 65, 10, 8);
+            ctx.fillRect(screenX + boss.width - 35, boss.y + 65, 10, 8);
+            ctx.globalAlpha = 1;
+        }
+
+        // Oyuncu
+        function drawPlayer() {
+            const screenX = player.x - cameraX;
+            if (player.invincible && Math.floor(player.invincibleTimer / 5) % 2 === 0) ctx.globalAlpha = 0.5;
+            ctx.fillStyle = player.color;
+            ctx.fillRect(screenX, player.y + 15, player.width, player.height - 15);
+            ctx.fillStyle = '#FDBF6F';
+            ctx.beginPath();
+            ctx.arc(screenX + player.width/2, player.y + 12, 15, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = player.hatColor;
+            ctx.fillRect(screenX + 2, player.y - 5, player.width - 4, 15);
+            ctx.fillRect(screenX - 3, player.y + 5, player.width + 6, 5);
+            ctx.fillStyle = 'black';
+            const eyeOffset = player.facingRight ? 3 : -3;
+            ctx.beginPath();
+            ctx.arc(screenX + 15 + eyeOffset, player.y + 10, 3, 0, Math.PI * 2);
+            ctx.arc(screenX + 25 + eyeOffset, player.y + 10, 3, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.globalAlpha = 1;
+        }
+
+        // Kamera
+        function updateCamera() {
+            const targetX = player.x - canvas.width / 3;
+            cameraX = Math.max(0, Math.min(targetX, worldWidth - canvas.width));
+        }
+
+        // Oyuncu güncelle
+        function updatePlayer() {
+            if (player.invincible) {
+                player.invincibleTimer++;
+                if (player.invincibleTimer > 90) {
+                    player.invincible = false;
+                    player.invincibleTimer = 0;
+                }
+            }
+            if (keys['ArrowLeft'] || keys['a']) { player.speedX = -moveSpeed; player.facingRight = false; }
+            else if (keys['ArrowRight'] || keys['d']) { player.speedX = moveSpeed; player.facingRight = true; }
+            else player.speedX = 0;
+            if ((keys['ArrowUp'] || keys[' '] || keys['w']) && !player.jumping) {
+                player.speedY = jumpPower;
+                player.jumping = true;
+            }
+            player.speedY += gravity;
+            player.x += player.speedX;
+            player.y += player.speedY;
+            if (player.x < 0) player.x = 0;
+            if (player.x + player.width > worldWidth) player.x = worldWidth - player.width;
+            player.jumping = true;
+            platforms.forEach(p => {
+                if (player.x < p.x + p.width && player.x + player.width > p.x &&
+                    player.y + player.height > p.y && player.y + player.height < p.y + p.height + player.speedY + 5 &&
+                    player.speedY >= 0) {
+                    player.y = p.y - player.height;
+                    player.speedY = 0;
+                    player.jumping = false;
+                }
+            });
+            if (player.y > canvas.height + 50) {
+                playerHit();
+                if (currentState === GAME_STATE.PLAYING) {
+                    player.x = Math.max(50, cameraX + 50);
+                    player.y = 300;
+                    player.speedX = 0;
+                    player.speedY = 0;
+                }
+            }
+        }
+
+        // Hasar
+        function playerHit() {
+            if (player.invincible) return;
+            player.lives--;
+            if (player.lives <= 0) {
+                gameEndTime = Date.now();
+                saveScore(false);
+                currentState = GAME_STATE.GAME_OVER;
+            } else {
+                player.invincible = true;
+                player.invincibleTimer = 0;
+            }
+        }
+
+        // Düşmanlar güncelle
+        function updateEnemies() {
+            enemies.forEach(e => {
+                if (e.x < -100) return;
+                e.x += e.speedX;
+                if (e.x <= e.minX || e.x + e.width >= e.maxX) e.speedX *= -1;
+            });
+        }
+
+        // Boss güncelle
+        function updateBoss() {
+            if (boss.defeated) return;
+            if (player.x > 2200 && !boss.isActive) boss.isActive = true;
+            if (!boss.isActive) return;
+            if (boss.hitTimer > 0) boss.hitTimer--;
+            boss.x += boss.speedX;
+            if (boss.x <= boss.minX || boss.x + boss.width >= boss.maxX) boss.speedX *= -1;
+            boss.attackTimer++;
+            if (boss.attackTimer > 120) {
+                boss.attackTimer = 0;
+                boss.speedX = boss.speedX > 0 ? 4 : -4;
+                setTimeout(() => { if (!boss.defeated) boss.speedX = boss.speedX > 0 ? 2 : -2; }, 500);
+            }
+        }
+
+        // Altın toplama
+        function checkCoinCollection() {
+            coins.forEach(coin => {
+                if (coin.collected) return;
+                const dx = (player.x + player.width/2) - coin.x;
+                const dy = (player.y + player.height/2) - coin.y;
+                if (Math.sqrt(dx*dx + dy*dy) < coin.size/2 + 25) {
+                    coin.collected = true;
+                    score += coin.isSecret ? (coin.size > 25 ? 50 : 30) : 10;
+                    document.getElementById('score').textContent = 'Puan: ' + score;
+                }
+            });
+        }
+
+        // Bayrak kontrolü
+        function checkFlagReached() {
+            if (boss.isActive && !boss.defeated) return;
+            if (player.x + player.width > flag.x && player.x < flag.x + 60 &&
+                player.y + player.height > flag.y - flag.poleHeight) {
+                score += player.lives * 100;
+                gameEndTime = Date.now();
+                saveScore(true);
+                currentState = GAME_STATE.GAME_WON;
+            }
+        }
+
+        // Düşman çarpışma
+        function checkEnemyCollision() {
+            enemies.forEach(e => {
+                if (e.x < -100) return;
+                if (player.x < e.x + e.width && player.x + player.width > e.x &&
+                    player.y + player.height > e.y && player.y < e.y + e.height) {
+                    if (player.speedY > 0 && player.y + player.height < e.y + e.height/2) {
+                        e.x = -200;
+                        player.speedY = jumpPower / 2;
+                        score += 20;
+                    } else if (!player.invincible) {
+                        playerHit();
+                        player.speedY = -8;
+                        player.x += player.x < e.x ? -30 : 30;
+                    }
+                }
+            });
+        }
+
+        // Boss çarpışma
+        function checkBossCollision() {
+            if (!boss.isActive || boss.defeated) return;
+            if (player.x < boss.x + boss.width && player.x + player.width > boss.x &&
+                player.y + player.height > boss.y && player.y < boss.y + boss.height) {
+                if (player.speedY > 0 && player.y + player.height < boss.y + 30) {
+                    boss.health--;
+                    boss.hitTimer = 20;
+                    player.speedY = jumpPower;
+                    score += 50;
+                    if (boss.health <= 0) {
+                        boss.defeated = true;
+                        score += 200;
+                        document.getElementById('message').textContent = 'BOSS YENİLDİ!';
+                    }
+                } else if (!player.invincible) {
+                    playerHit();
+                    player.speedY = -10;
+                    player.x += player.x < boss.x ? -50 : 50;
+                }
+            }
+        }
+
+        // Ana döngü
+        function gameLoop() {
+            // İsim girişi
+            if (currentState === GAME_STATE.NAME_INPUT) {
+                drawNameInput();
+                requestAnimationFrame(gameLoop);
+                return;
+            }
+
+            // Leaderboard
+            if (currentState === GAME_STATE.LEADERBOARD) {
+                drawLeaderboard();
+                requestAnimationFrame(gameLoop);
+                return;
+            }
+
+            // Oyun
+            drawBackground();
+
+            if (currentState === GAME_STATE.PLAYING) {
+                updatePlayer();
+                updateCamera();
+                updateEnemies();
+                updateBoss();
+                updateFireballs();
+                checkCoinCollection();
+                checkFirePowerUnlock();
+                checkEnemyCollision();
+                checkBossCollision();
+                checkFireballCollisions();
+                checkFlagReached();
+            }
+
+            drawPlatforms();
+            drawFlag();
+            drawCoins();
+            drawEnemies();
+            drawBoss();
+            drawFireballs();
+            drawPlayer();
+            drawUI();
+            drawNotification();
+
+            if (currentState === GAME_STATE.GAME_OVER) {
+                drawGameEndScreen(false);
+            } else if (currentState === GAME_STATE.GAME_WON) {
+                drawGameEndScreen(true);
+            }
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        gameLoop();
+    </script>
+</body>
+</html>
