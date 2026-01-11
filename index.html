@@ -215,6 +215,49 @@
             }
         }
 
+        /* Mobil yatay mod (landscape) */
+        @media (max-height: 500px) and (orientation: landscape) {
+            body {
+                align-items: flex-start;
+                padding-top: 5px;
+            }
+            .game-container {
+                padding: 2px;
+            }
+            h1 {
+                font-size: 0.9em;
+                margin-bottom: 3px;
+            }
+            #score, #message {
+                font-size: 0.8em;
+                margin-top: 2px;
+            }
+            #message {
+                min-height: 15px;
+            }
+            #mobileControls {
+                bottom: 5px;
+                padding: 5px;
+            }
+            .control-btn {
+                width: 50px;
+                height: 50px;
+                font-size: 20px;
+            }
+            #jumpBtn {
+                width: 60px;
+                height: 60px;
+                font-size: 24px;
+            }
+            #mobileGameEndBtns {
+                bottom: 70px;
+            }
+            .game-end-btn {
+                padding: 10px 15px;
+                font-size: 14px;
+            }
+        }
+
         /* Mobil game over butonları */
         #mobileGameEndBtns {
             display: none;
@@ -324,13 +367,25 @@
 
         // Canvas responsive ayarı
         function resizeCanvas() {
-            const maxWidth = Math.min(window.innerWidth - 20, 800);
             const ratio = 800 / 450;
-            canvas.style.width = maxWidth + 'px';
-            canvas.style.height = (maxWidth / ratio) + 'px';
+            const isLandscape = window.innerWidth > window.innerHeight;
+
+            if (isLandscape && isMobile) {
+                // Yatay modda: yüksekliğe göre ayarla (kontroller için yer bırak)
+                const availableHeight = window.innerHeight - 100; // kontroller için 100px
+                const maxHeight = Math.min(availableHeight, 350);
+                canvas.style.height = maxHeight + 'px';
+                canvas.style.width = (maxHeight * ratio) + 'px';
+            } else {
+                // Dikey mod veya masaüstü: genişliğe göre ayarla
+                const maxWidth = Math.min(window.innerWidth - 20, 800);
+                canvas.style.width = maxWidth + 'px';
+                canvas.style.height = (maxWidth / ratio) + 'px';
+            }
         }
         resizeCanvas();
         window.addEventListener('resize', resizeCanvas);
+        window.addEventListener('orientationchange', () => setTimeout(resizeCanvas, 100));
 
         // Dünya ayarları (kayan harita)
         const worldWidth = 3200;
