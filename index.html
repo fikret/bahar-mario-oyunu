@@ -19,23 +19,33 @@
             background: linear-gradient(to bottom, #1a1a2e, #16213e);
             font-family: 'Comic Sans MS', cursive;
             overflow: hidden;
+            touch-action: none;
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            user-select: none;
         }
 
         .game-container {
             text-align: center;
+            width: 100%;
+            max-width: 850px;
+            padding: 10px;
         }
 
         h1 {
             color: #E74C3C;
             text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
             margin-bottom: 10px;
-            font-size: 2em;
+            font-size: 1.5em;
         }
 
         #gameCanvas {
             border: 4px solid #8B4513;
             border-radius: 10px;
             box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            max-width: 100%;
+            height: auto;
+            touch-action: none;
         }
 
         .info {
@@ -72,12 +82,181 @@
             margin-top: 10px;
             min-height: 30px;
         }
+
+        /* Mobil isim girişi */
+        #nameInputContainer {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 1000;
+            background: rgba(26, 26, 46, 0.98);
+            padding: 30px;
+            border-radius: 15px;
+            border: 3px solid #3498DB;
+            box-shadow: 0 0 30px rgba(52, 152, 219, 0.5);
+        }
+
+        #nameInputContainer h2 {
+            color: #E74C3C;
+            margin-bottom: 20px;
+            font-size: 1.5em;
+        }
+
+        #nameInput {
+            font-size: 24px;
+            padding: 15px 20px;
+            border: 3px solid #3498DB;
+            border-radius: 10px;
+            background: rgba(255,255,255,0.1);
+            color: #F1C40F;
+            text-align: center;
+            width: 250px;
+            font-family: 'Comic Sans MS', cursive;
+        }
+
+        #nameInput::placeholder {
+            color: rgba(241, 196, 15, 0.5);
+        }
+
+        #startGameBtn {
+            display: block;
+            margin-top: 20px;
+            padding: 15px 40px;
+            font-size: 20px;
+            background: #27AE60;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            font-family: 'Comic Sans MS', cursive;
+            width: 100%;
+        }
+
+        #startGameBtn:disabled {
+            background: #555;
+            cursor: not-allowed;
+        }
+
+        /* Mobil kontroller */
+        #mobileControls {
+            display: none;
+            position: fixed;
+            bottom: 10px;
+            left: 0;
+            right: 0;
+            padding: 10px;
+            z-index: 100;
+        }
+
+        .control-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            max-width: 100%;
+            margin: 0 auto;
+        }
+
+        .control-btn {
+            width: 70px;
+            height: 70px;
+            border-radius: 50%;
+            border: 3px solid rgba(255,255,255,0.5);
+            background: rgba(52, 152, 219, 0.7);
+            color: white;
+            font-size: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            touch-action: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .control-btn:active {
+            background: rgba(52, 152, 219, 1);
+            transform: scale(0.95);
+        }
+
+        .left-controls, .right-controls {
+            display: flex;
+            gap: 10px;
+        }
+
+        #jumpBtn {
+            background: rgba(39, 174, 96, 0.7);
+            width: 90px;
+            height: 90px;
+            font-size: 32px;
+        }
+
+        #jumpBtn:active {
+            background: rgba(39, 174, 96, 1);
+        }
+
+        #fireBtn {
+            background: rgba(231, 76, 60, 0.7);
+        }
+
+        #fireBtn:active {
+            background: rgba(231, 76, 60, 1);
+        }
+
+        /* Mobil için gizle */
+        @media (max-width: 850px) {
+            .controls, .info {
+                display: none;
+            }
+            h1 {
+                font-size: 1.2em;
+            }
+            #score, #message {
+                font-size: 1em;
+            }
+        }
+
+        /* Mobil game over butonları */
+        #mobileGameEndBtns {
+            display: none;
+            position: fixed;
+            bottom: 100px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 200;
+            gap: 15px;
+        }
+
+        .game-end-btn {
+            padding: 15px 25px;
+            font-size: 18px;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            font-family: 'Comic Sans MS', cursive;
+        }
+
+        #newGameBtn {
+            background: #3498DB;
+            color: white;
+        }
+
+        #leaderboardBtn {
+            background: #9B59B6;
+            color: white;
+        }
     </style>
     <!-- Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
 </head>
 <body>
+    <!-- Mobil isim girişi formu -->
+    <div id="nameInputContainer">
+        <h2>Adını Yaz</h2>
+        <input type="text" id="nameInput" placeholder="Adın..." maxlength="15" autocomplete="off">
+        <button id="startGameBtn" disabled>OYUNA BAŞLA</button>
+    </div>
+
     <div class="game-container">
         <h1>Bahar'ın Mario Macerası</h1>
         <canvas id="gameCanvas" width="800" height="450"></canvas>
@@ -89,6 +268,26 @@
             <span>F veya X Ateş At</span>
         </div>
         <p class="info">70 puana ulaş ve ateş gücünü aç! BOSS'u yen ve bayrağa ulaş!</p>
+    </div>
+
+    <!-- Mobil kontroller -->
+    <div id="mobileControls">
+        <div class="control-row">
+            <div class="left-controls">
+                <button class="control-btn" id="leftBtn">◀</button>
+                <button class="control-btn" id="rightBtn">▶</button>
+            </div>
+            <button class="control-btn" id="jumpBtn">▲</button>
+            <div class="right-controls">
+                <button class="control-btn" id="fireBtn">🔥</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Mobil oyun sonu butonları -->
+    <div id="mobileGameEndBtns">
+        <button class="game-end-btn" id="newGameBtn">Yeni Oyun</button>
+        <button class="game-end-btn" id="leaderboardBtn">Sıralama</button>
     </div>
 
     <script>
@@ -107,9 +306,31 @@
         firebase.initializeApp(firebaseConfig);
         const database = firebase.database();
 
+        // Mobil algılama
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth <= 850;
+
         // Oyun ayarları
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
+
+        // Mobil elementler
+        const nameInputContainer = document.getElementById('nameInputContainer');
+        const nameInputEl = document.getElementById('nameInput');
+        const startGameBtn = document.getElementById('startGameBtn');
+        const mobileControls = document.getElementById('mobileControls');
+        const mobileGameEndBtns = document.getElementById('mobileGameEndBtns');
+        const newGameBtn = document.getElementById('newGameBtn');
+        const leaderboardBtn = document.getElementById('leaderboardBtn');
+
+        // Canvas responsive ayarı
+        function resizeCanvas() {
+            const maxWidth = Math.min(window.innerWidth - 20, 800);
+            const ratio = 800 / 450;
+            canvas.style.width = maxWidth + 'px';
+            canvas.style.height = (maxWidth / ratio) + 'px';
+        }
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
 
         // Dünya ayarları (kayan harita)
         const worldWidth = 3200;
@@ -320,8 +541,8 @@
         document.addEventListener('keydown', (e) => {
             keys[e.key] = true;
 
-            // İsim girişi ekranı
-            if (currentState === GAME_STATE.NAME_INPUT) {
+            // İsim girişi ekranı (masaüstü için)
+            if (currentState === GAME_STATE.NAME_INPUT && !isMobile) {
                 if (e.key === 'Backspace') {
                     nameInputText = nameInputText.slice(0, -1);
                 } else if (e.key === 'Enter' && nameInputText.length >= 2) {
@@ -337,8 +558,7 @@
             // Leaderboard ekranı
             if (currentState === GAME_STATE.LEADERBOARD) {
                 if (e.key === 'r' || e.key === 'Enter') {
-                    currentState = GAME_STATE.NAME_INPUT;
-                    nameInputText = '';
+                    showNameInput();
                 }
                 return;
             }
@@ -351,9 +571,9 @@
             if ((currentState === GAME_STATE.GAME_OVER || currentState === GAME_STATE.GAME_WON)) {
                 if (e.key === 'l') {
                     currentState = GAME_STATE.LEADERBOARD;
+                    hideMobileGameEndBtns();
                 } else if (e.key === 'r') {
-                    currentState = GAME_STATE.NAME_INPUT;
-                    nameInputText = '';
+                    showNameInput();
                 }
                 return;
             }
@@ -368,11 +588,116 @@
             keys[e.key] = false;
         });
 
+        // Mobil isim girişi event'leri
+        nameInputEl.addEventListener('input', () => {
+            nameInputText = nameInputEl.value;
+            startGameBtn.disabled = nameInputText.length < 2;
+        });
+
+        startGameBtn.addEventListener('click', () => {
+            if (nameInputText.length >= 2) {
+                playerName = nameInputText;
+                nameInputContainer.style.display = 'none';
+                startGame();
+            }
+        });
+
+        // Mobil oyun sonu butonları
+        newGameBtn.addEventListener('click', () => {
+            showNameInput();
+        });
+
+        leaderboardBtn.addEventListener('click', () => {
+            currentState = GAME_STATE.LEADERBOARD;
+            hideMobileGameEndBtns();
+        });
+
+        // İsim girişi ekranını göster
+        function showNameInput() {
+            currentState = GAME_STATE.NAME_INPUT;
+            nameInputText = '';
+            hideMobileControls();
+            hideMobileGameEndBtns();
+            if (isMobile) {
+                nameInputContainer.style.display = 'block';
+                nameInputEl.value = '';
+                startGameBtn.disabled = true;
+                setTimeout(() => nameInputEl.focus(), 100);
+            }
+        }
+
+        // Mobil kontrolleri göster/gizle
+        function showMobileControls() {
+            if (isMobile) {
+                mobileControls.style.display = 'block';
+            }
+        }
+
+        function hideMobileControls() {
+            mobileControls.style.display = 'none';
+        }
+
+        function showMobileGameEndBtns() {
+            if (isMobile) {
+                mobileGameEndBtns.style.display = 'flex';
+            }
+        }
+
+        function hideMobileGameEndBtns() {
+            mobileGameEndBtns.style.display = 'none';
+        }
+
+        // Mobil dokunmatik kontroller
+        const leftBtn = document.getElementById('leftBtn');
+        const rightBtn = document.getElementById('rightBtn');
+        const jumpBtn = document.getElementById('jumpBtn');
+        const fireBtn = document.getElementById('fireBtn');
+
+        function addTouchEvents(btn, keyDown, keyUp) {
+            btn.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                keys[keyDown] = true;
+            }, { passive: false });
+            btn.addEventListener('touchend', (e) => {
+                e.preventDefault();
+                keys[keyUp || keyDown] = false;
+            }, { passive: false });
+            btn.addEventListener('touchcancel', (e) => {
+                keys[keyUp || keyDown] = false;
+            });
+        }
+
+        addTouchEvents(leftBtn, 'ArrowLeft');
+        addTouchEvents(rightBtn, 'ArrowRight');
+
+        jumpBtn.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            if (currentState === GAME_STATE.PLAYING && !player.jumping) {
+                player.speedY = jumpPower;
+                player.jumping = true;
+            }
+        }, { passive: false });
+
+        fireBtn.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            if (currentState === GAME_STATE.PLAYING && hasFirePower && fireballCooldown <= 0) {
+                shootFireball();
+            }
+        }, { passive: false });
+
+        // Sayfa yüklendiğinde mobil isim girişini göster
+        if (isMobile) {
+            nameInputContainer.style.display = 'block';
+            setTimeout(() => nameInputEl.focus(), 300);
+        }
+
         // Oyunu başlat
         function startGame() {
             currentState = GAME_STATE.PLAYING;
             gameStartTime = Date.now();
             resetGameState();
+            showMobileControls();
+            hideMobileGameEndBtns();
         }
 
         // Oyun durumunu sıfırla
@@ -463,7 +788,7 @@
 
         // İsim girişi ekranı
         function drawNameInput() {
-            // Arka plan
+            // Mobilde HTML form gösterildiği için canvas'ta sadece arka plan çiz
             const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
             gradient.addColorStop(0, '#1a1a2e');
             gradient.addColorStop(1, '#16213e');
@@ -472,65 +797,71 @@
 
             // Başlık
             ctx.fillStyle = '#E74C3C';
-            ctx.font = 'bold 42px Comic Sans MS';
+            ctx.font = isMobile ? 'bold 28px Comic Sans MS' : 'bold 42px Comic Sans MS';
             ctx.textAlign = 'center';
-            ctx.fillText("🎮 Bahar'ın Mario Macerası 🎮", canvas.width/2, 80);
+            ctx.fillText("Bahar'ın Mario Macerası", canvas.width/2, isMobile ? 60 : 80);
 
             // Karakter resmi
             ctx.fillStyle = '#E74C3C';
-            ctx.fillRect(canvas.width/2 - 20, 120, 40, 35);
+            ctx.fillRect(canvas.width/2 - 20, isMobile ? 80 : 120, 40, 35);
             ctx.fillStyle = '#FDBF6F';
             ctx.beginPath();
-            ctx.arc(canvas.width/2, 115, 15, 0, Math.PI * 2);
+            ctx.arc(canvas.width/2, isMobile ? 75 : 115, 15, 0, Math.PI * 2);
             ctx.fill();
             ctx.fillStyle = '#C0392B';
-            ctx.fillRect(canvas.width/2 - 18, 95, 36, 15);
+            ctx.fillRect(canvas.width/2 - 18, isMobile ? 55 : 95, 36, 15);
 
-            // İsim girişi kutusu
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
-            ctx.fillRect(canvas.width/2 - 150, 180, 300, 50);
-            ctx.strokeStyle = '#3498DB';
-            ctx.lineWidth = 3;
-            ctx.strokeRect(canvas.width/2 - 150, 180, 300, 50);
+            // Mobilde form gösteriliyor, canvas'ta input kutusunu çizme
+            if (!isMobile) {
+                // İsim girişi kutusu
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+                ctx.fillRect(canvas.width/2 - 150, 180, 300, 50);
+                ctx.strokeStyle = '#3498DB';
+                ctx.lineWidth = 3;
+                ctx.strokeRect(canvas.width/2 - 150, 180, 300, 50);
 
-            ctx.fillStyle = '#FFFFFF';
-            ctx.font = '24px Comic Sans MS';
-            ctx.fillText('Adını Yaz:', canvas.width/2, 170);
+                ctx.fillStyle = '#FFFFFF';
+                ctx.font = '24px Comic Sans MS';
+                ctx.fillText('Adını Yaz:', canvas.width/2, 170);
 
-            // Girilen isim
-            ctx.fillStyle = '#F1C40F';
-            ctx.font = 'bold 28px Comic Sans MS';
-            const displayText = nameInputText + (Math.floor(Date.now() / 500) % 2 === 0 ? '|' : '');
-            ctx.fillText(displayText || '|', canvas.width/2, 215);
+                // Girilen isim
+                ctx.fillStyle = '#F1C40F';
+                ctx.font = 'bold 28px Comic Sans MS';
+                const displayText = nameInputText + (Math.floor(Date.now() / 500) % 2 === 0 ? '|' : '');
+                ctx.fillText(displayText || '|', canvas.width/2, 215);
 
-            // Talimatlar
-            ctx.fillStyle = '#BDC3C7';
-            ctx.font = '18px Comic Sans MS';
-            ctx.fillText('En az 2 karakter gir ve ENTER tuşuna bas', canvas.width/2, 260);
+                // Talimatlar
+                ctx.fillStyle = '#BDC3C7';
+                ctx.font = '18px Comic Sans MS';
+                ctx.fillText('En az 2 karakter gir ve ENTER tuşuna bas', canvas.width/2, 260);
+            }
 
             // Leaderboard önizleme
+            const lbY = isMobile ? 350 : 310;
             if (!leaderboardLoaded) {
                 ctx.fillStyle = '#3498DB';
                 ctx.font = '18px Comic Sans MS';
-                ctx.fillText('🌐 Leaderboard yükleniyor...', canvas.width/2, 310);
+                ctx.fillText('Leaderboard yükleniyor...', canvas.width/2, lbY);
             } else if (leaderboard.length > 0) {
                 ctx.fillStyle = '#9B59B6';
-                ctx.font = 'bold 22px Comic Sans MS';
-                ctx.fillText('🏆 EN İYİ OYUNCULAR (Online) 🏆', canvas.width/2, 310);
+                ctx.font = isMobile ? 'bold 18px Comic Sans MS' : 'bold 22px Comic Sans MS';
+                ctx.fillText('EN IYI OYUNCULAR (Online)', canvas.width/2, lbY);
 
-                ctx.font = '16px Comic Sans MS';
+                ctx.font = isMobile ? '14px Comic Sans MS' : '16px Comic Sans MS';
                 const topPlayers = leaderboard.slice(0, 3);
                 topPlayers.forEach((entry, i) => {
-                    const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : '🥉';
+                    const medal = i === 0 ? '1.' : i === 1 ? '2.' : '3.';
                     ctx.fillStyle = '#ECF0F1';
-                    ctx.fillText(`${medal} ${entry.name}: ${entry.score} puan`, canvas.width/2, 340 + i * 25);
+                    ctx.fillText(`${medal} ${entry.name}: ${entry.score} puan`, canvas.width/2, lbY + 25 + i * 22);
                 });
             }
 
-            // Oyun açıklaması
-            ctx.fillStyle = '#27AE60';
-            ctx.font = '14px Comic Sans MS';
-            ctx.fillText('← → Hareket | ↑ Zıpla | F Ateş At | 70 puan = Ateş Gücü!', canvas.width/2, 420);
+            // Oyun açıklaması (sadece masaüstü)
+            if (!isMobile) {
+                ctx.fillStyle = '#27AE60';
+                ctx.font = '14px Comic Sans MS';
+                ctx.fillText('← → Hareket | ↑ Zıpla | F Ateş At | 70 puan = Ateş Gücü!', canvas.width/2, 420);
+            }
         }
 
         // Leaderboard ekranı
@@ -540,76 +871,99 @@
 
             // Başlık
             ctx.fillStyle = '#F1C40F';
-            ctx.font = 'bold 36px Comic Sans MS';
+            ctx.font = isMobile ? 'bold 24px Comic Sans MS' : 'bold 36px Comic Sans MS';
             ctx.textAlign = 'center';
-            ctx.fillText('🏆 ONLINE LEADERBOARD 🏆', canvas.width/2, 50);
+            ctx.fillText('ONLINE LEADERBOARD', canvas.width/2, isMobile ? 35 : 50);
 
-            // Tablo başlıkları
-            ctx.fillStyle = '#3498DB';
-            ctx.font = 'bold 16px Comic Sans MS';
-            ctx.textAlign = 'left';
-            ctx.fillText('SIRA', 60, 90);
-            ctx.fillText('İSİM', 120, 90);
-            ctx.fillText('PUAN', 280, 90);
-            ctx.fillText('SÜRE', 380, 90);
-            ctx.fillText('CAN', 460, 90);
-            ctx.fillText('DURUM', 520, 90);
-            ctx.fillText('TARİH', 620, 90);
-
-            // Çizgi
-            ctx.strokeStyle = '#3498DB';
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.moveTo(50, 100);
-            ctx.lineTo(750, 100);
-            ctx.stroke();
-
-            // Oyuncular
-            if (leaderboard.length === 0) {
-                ctx.fillStyle = '#BDC3C7';
-                ctx.font = '20px Comic Sans MS';
-                ctx.textAlign = 'center';
-                ctx.fillText('Henüz kayıt yok. İlk sen ol!', canvas.width/2, 200);
-            } else {
-                leaderboard.forEach((entry, i) => {
-                    const y = 130 + i * 30;
-                    const medals = ['🥇', '🥈', '🥉'];
-                    const medal = i < 3 ? medals[i] : `${i + 1}.`;
-
-                    // Arka plan (ilk 3 için özel)
-                    if (i < 3) {
-                        ctx.fillStyle = i === 0 ? 'rgba(255, 215, 0, 0.2)' :
-                                       i === 1 ? 'rgba(192, 192, 192, 0.2)' :
-                                       'rgba(205, 127, 50, 0.2)';
-                        ctx.fillRect(50, y - 18, 700, 28);
-                    }
-
-                    ctx.fillStyle = i < 3 ? '#F1C40F' : '#ECF0F1';
-                    ctx.font = i < 3 ? 'bold 16px Comic Sans MS' : '16px Comic Sans MS';
-                    ctx.textAlign = 'left';
-
-                    ctx.fillText(medal, 60, y);
-                    ctx.fillText(entry.name.substring(0, 12), 120, y);
-                    ctx.fillText(entry.score.toString(), 280, y);
-                    ctx.fillText(formatTime(entry.time), 380, y);
-
-                    // Kalpler
-                    ctx.fillText('❤️'.repeat(entry.lives), 460, y);
-
-                    // Durum
-                    ctx.fillStyle = entry.won ? '#27AE60' : '#E74C3C';
-                    ctx.fillText(entry.won ? '✅ Kazandı' : '❌ Kaybetti', 520, y);
-
+            if (isMobile) {
+                // Mobil için basit liste
+                if (leaderboard.length === 0) {
                     ctx.fillStyle = '#BDC3C7';
-                    ctx.fillText(entry.date, 620, y);
-                });
-            }
+                    ctx.font = '18px Comic Sans MS';
+                    ctx.fillText('Henüz kayıt yok. İlk sen ol!', canvas.width/2, 150);
+                } else {
+                    leaderboard.forEach((entry, i) => {
+                        const y = 70 + i * 35;
+                        const medal = i === 0 ? '1.' : i === 1 ? '2.' : i === 2 ? '3.' : `${i + 1}.`;
 
-            // Alt bilgi
-            ctx.fillStyle = '#9B59B6';
-            ctx.font = '18px Comic Sans MS';
-            ctx.textAlign = 'center';
-            ctx.fillText('R tuşuna basarak yeni oyun başlat', canvas.width/2, 420);
+                        if (i < 3) {
+                            ctx.fillStyle = i === 0 ? 'rgba(255, 215, 0, 0.2)' :
+                                           i === 1 ? 'rgba(192, 192, 192, 0.2)' :
+                                           'rgba(205, 127, 50, 0.2)';
+                            ctx.fillRect(20, y - 15, canvas.width - 40, 30);
+                        }
+
+                        ctx.fillStyle = i < 3 ? '#F1C40F' : '#ECF0F1';
+                        ctx.font = i < 3 ? 'bold 14px Comic Sans MS' : '14px Comic Sans MS';
+                        ctx.textAlign = 'center';
+                        const status = entry.won ? 'W' : 'L';
+                        ctx.fillText(`${medal} ${entry.name} - ${entry.score}p - ${formatTime(entry.time)} ${status}`, canvas.width/2, y);
+                    });
+                }
+
+                // Mobil butonları göster
+                showMobileGameEndBtns();
+            } else {
+                // Masaüstü için tablo
+                ctx.fillStyle = '#3498DB';
+                ctx.font = 'bold 16px Comic Sans MS';
+                ctx.textAlign = 'left';
+                ctx.fillText('SIRA', 60, 90);
+                ctx.fillText('ISIM', 120, 90);
+                ctx.fillText('PUAN', 280, 90);
+                ctx.fillText('SURE', 380, 90);
+                ctx.fillText('CAN', 460, 90);
+                ctx.fillText('DURUM', 520, 90);
+                ctx.fillText('TARIH', 620, 90);
+
+                ctx.strokeStyle = '#3498DB';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(50, 100);
+                ctx.lineTo(750, 100);
+                ctx.stroke();
+
+                if (leaderboard.length === 0) {
+                    ctx.fillStyle = '#BDC3C7';
+                    ctx.font = '20px Comic Sans MS';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('Henüz kayıt yok. İlk sen ol!', canvas.width/2, 200);
+                } else {
+                    leaderboard.forEach((entry, i) => {
+                        const y = 130 + i * 30;
+                        const medals = ['1.', '2.', '3.'];
+                        const medal = i < 3 ? medals[i] : `${i + 1}.`;
+
+                        if (i < 3) {
+                            ctx.fillStyle = i === 0 ? 'rgba(255, 215, 0, 0.2)' :
+                                           i === 1 ? 'rgba(192, 192, 192, 0.2)' :
+                                           'rgba(205, 127, 50, 0.2)';
+                            ctx.fillRect(50, y - 18, 700, 28);
+                        }
+
+                        ctx.fillStyle = i < 3 ? '#F1C40F' : '#ECF0F1';
+                        ctx.font = i < 3 ? 'bold 16px Comic Sans MS' : '16px Comic Sans MS';
+                        ctx.textAlign = 'left';
+
+                        ctx.fillText(medal, 60, y);
+                        ctx.fillText(entry.name.substring(0, 12), 120, y);
+                        ctx.fillText(entry.score.toString(), 280, y);
+                        ctx.fillText(formatTime(entry.time), 380, y);
+                        ctx.fillText('*'.repeat(entry.lives), 460, y);
+
+                        ctx.fillStyle = entry.won ? '#27AE60' : '#E74C3C';
+                        ctx.fillText(entry.won ? 'Kazandi' : 'Kaybetti', 520, y);
+
+                        ctx.fillStyle = '#BDC3C7';
+                        ctx.fillText(entry.date, 620, y);
+                    });
+                }
+
+                ctx.fillStyle = '#9B59B6';
+                ctx.font = '18px Comic Sans MS';
+                ctx.textAlign = 'center';
+                ctx.fillText('R tusuna basarak yeni oyun baslat', canvas.width/2, 420);
+            }
         }
 
         // Oyun sonu ekranı
@@ -655,21 +1009,29 @@
                 ctx.fillText(`🏅 SIRALAMADA ${rank}. SIRADA!`, canvas.width/2, 330);
             }
 
-            // Butonlar
-            ctx.fillStyle = '#3498DB';
-            ctx.fillRect(canvas.width/2 - 180, 360, 160, 45);
-            ctx.fillStyle = '#9B59B6';
-            ctx.fillRect(canvas.width/2 + 20, 360, 160, 45);
+            // Butonlar (masaüstü için)
+            if (!isMobile) {
+                ctx.fillStyle = '#3498DB';
+                ctx.fillRect(canvas.width/2 - 180, 360, 160, 45);
+                ctx.fillStyle = '#9B59B6';
+                ctx.fillRect(canvas.width/2 + 20, 360, 160, 45);
 
-            ctx.fillStyle = '#FFFFFF';
-            ctx.font = 'bold 18px Comic Sans MS';
-            ctx.textAlign = 'center';
-            ctx.fillText('R - Yeni Oyun', canvas.width/2 - 100, 390);
-            ctx.fillText('L - Sıralama', canvas.width/2 + 100, 390);
+                ctx.fillStyle = '#FFFFFF';
+                ctx.font = 'bold 18px Comic Sans MS';
+                ctx.textAlign = 'center';
+                ctx.fillText('R - Yeni Oyun', canvas.width/2 - 100, 390);
+                ctx.fillText('L - Sıralama', canvas.width/2 + 100, 390);
+            }
 
-            ctx.fillStyle = '#BDC3C7';
-            ctx.font = '14px Comic Sans MS';
-            ctx.fillText('Klavyeden R veya L tuşuna bas', canvas.width/2, 430);
+            // Mobil butonları göster
+            hideMobileControls();
+            showMobileGameEndBtns();
+
+            if (!isMobile) {
+                ctx.fillStyle = '#BDC3C7';
+                ctx.font = '14px Comic Sans MS';
+                ctx.fillText('Klavyeden R veya L tuşuna bas', canvas.width/2, 430);
+            }
         }
 
         // Ateş topu at
